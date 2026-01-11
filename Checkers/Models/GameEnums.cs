@@ -4,7 +4,6 @@ namespace Checkers.Models
 {
     public class GameEnums
     {
-        [JsonConverter(typeof(JsonStringEnumConverter))]
         public enum Piece
         {
             Empty,

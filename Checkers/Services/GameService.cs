@@ -1,5 +1,7 @@
-﻿using Checkers.Models;
+﻿using Checkers.Hubs;
+using Checkers.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.SignalR;
 using MongoDB.Driver;
 
 namespace Checkers.Services
@@ -15,8 +17,10 @@ namespace Checkers.Services
     public class GameService : IGameService
     {
         private readonly Core.AppDbContext _context;
-        public GameService(Core.AppDbContext context)
+        private readonly IHubContext<GameHub> _hubContext;
+        public GameService(Core.AppDbContext context, IHubContext<GameHub> hubContext)
         {
+            _hubContext = hubContext;
             _context = context;
         }
         public async Task<Game> CreateGameAsync(string hostUserId)
@@ -40,7 +44,12 @@ namespace Checkers.Services
                 .Set(g => g.PlayerBlackId, secondPlayerId)
                 .Set(g => g.Status, GameEnums.GameStatus.InProgress);
             var result = await _context.Games.UpdateOneAsync(g => g.Id == gameId && g.Status == GameEnums.GameStatus.WaitingForOpponent, update);
-            return result.ModifiedCount > 0;
+            bool success =  result.ModifiedCount > 0;
+            if(success)
+            {
+                await _hubContext.Clients.Group(gameId).SendAsync("OpponentJoined", secondPlayerId);
+            }
+            return success;
         }
         public async Task<List<Game>> GetOpenGamesAsync()
         {
@@ -135,6 +144,7 @@ namespace Checkers.Services
                 .Set(g => g.CurrentTurn, game.CurrentTurn);
 
             await _context.Games.UpdateOneAsync(g => g.Id == game.Id, update);
+            await _hubContext.Clients.Group(move.GameId).SendAsync("GameUpdated", game);
             return game;
         }
     }

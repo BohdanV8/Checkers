@@ -58,15 +58,17 @@ namespace Checkers.Controllers
             Response.Cookies.Append("accessToken", accessToken, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,  // false for HTTP (development)
-                SameSite = SameSiteMode.Lax,
+                Secure = true,  // false for HTTP (development)
+                SameSite = SameSiteMode.None,
+                Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddMinutes(15)
             });
             Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,  // false for HTTP (development)
-                SameSite = SameSiteMode.Lax,
+                Secure = true,  // false for HTTP (development)
+                SameSite = SameSiteMode.None,
+                Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddDays(7)
             });
             var activationLink = $"http://localhost:5239/auth/activate?code={activationCode}";
@@ -136,15 +138,17 @@ namespace Checkers.Controllers
             Response.Cookies.Append("accessToken", accessToken, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,  // false for HTTP (development)
-                SameSite = SameSiteMode.Lax,
+                Secure = true,  // false for HTTP (development)
+                SameSite = SameSiteMode.None,
+                Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddMinutes(15)
             });
             Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,  // false for HTTP (development)
-                SameSite = SameSiteMode.Lax,
+                Secure = true,  // false for HTTP (development)
+                SameSite = SameSiteMode.None,
+                Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddDays(7)
             });
             return Ok(new
@@ -162,18 +166,11 @@ namespace Checkers.Controllers
         [HttpPost("refresh")]
         public async Task<IActionResult> RefreshToken()
         {
-            var accessToken = Request.Cookies["accessToken"];
             var refreshToken = Request.Cookies["refreshToken"];
-
-            if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(refreshToken))
-                return Unauthorized(new { message = "Tokens not found in cookies" });
-            var principal = _jwtService.ValidateToken(accessToken);
-            if (principal == null)
-                return Unauthorized(new { message = "Invalid access token" });
-            var email = principal.FindFirst(ClaimTypes.Email)?.Value;
-            if (email == null)
-                return Unauthorized(new { message = "Invalid token claims" });
-            var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
+            Console.WriteLine("Refresh Token: " + refreshToken);
+            if (string.IsNullOrEmpty(refreshToken))
+                return Unauthorized(new { message = "Token not found in cookies" });
+            var user = await _users.Find(u => u.RefreshToken.Token == refreshToken).FirstOrDefaultAsync();
             if (user == null || user.RefreshToken == null || user.RefreshToken.Token != refreshToken || user.RefreshToken.Expires <= DateTime.UtcNow)
             {
                 Response.Cookies.Delete("accessToken");
@@ -192,16 +189,18 @@ namespace Checkers.Controllers
             Response.Cookies.Append("accessToken", newAccessToken, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,
-                SameSite = SameSiteMode.Lax,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddMinutes(15)
             });
 
             Response.Cookies.Append("refreshToken", newRefreshTokenString, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,
-                SameSite = SameSiteMode.Lax,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddDays(7)
             });
             return Ok(new { message = "Tokens refreshed successfully" });
@@ -220,9 +219,15 @@ namespace Checkers.Controllers
                 var update = Builders<User>.Update.Set(u => u.RefreshToken, null);
                 await _users.UpdateOneAsync(u => u.Id == user.Id, update);
             }
-
-            Response.Cookies.Delete("accessToken");
-            Response.Cookies.Delete("refreshToken");
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/"
+            };
+            Response.Cookies.Delete("accessToken", cookieOptions);
+            Response.Cookies.Delete("refreshToken", cookieOptions);
             return Ok(new { message = "Logged out successfully" });
         }
 

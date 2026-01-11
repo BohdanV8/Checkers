@@ -69,7 +69,7 @@ namespace Checkers.Services
                     ValidIssuer = _jwtSettings.Issuer,
                     ValidateAudience = true,
                     ValidAudience = _jwtSettings.Audience,
-                    ValidateLifetime = false, // We validate expired tokens for refresh
+                    ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 }, out SecurityToken validatedToken);
 
