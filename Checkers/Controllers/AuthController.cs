@@ -79,6 +79,7 @@ namespace Checkers.Controllers
                 refreshToken,
                 user = new
                 {
+                    id = user.Id,
                     email = user.Email
                 }
             });
@@ -157,6 +158,7 @@ namespace Checkers.Controllers
                 refreshToken,
                 user = new
                 {
+                    id = user.Id,
                     email = user.Email,
                     isActivated = user.IsActivated,
                 }
@@ -203,7 +205,16 @@ namespace Checkers.Controllers
                 Path = "/",
                 Expires = DateTimeOffset.UtcNow.AddDays(7)
             });
-            return Ok(new { message = "Tokens refreshed successfully" });
+            return Ok(new
+            {
+                accessToken = newAccessToken,
+                refreshToken = newRefreshTokenString,
+                user = new
+                {
+                    id = user.Id, 
+                    email = user.Email
+                }
+            });
         }
         [Authorize]
         [HttpPost("logout")]

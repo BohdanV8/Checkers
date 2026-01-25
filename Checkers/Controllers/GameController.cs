@@ -11,10 +11,10 @@ namespace Checkers.Controllers
     [Authorize]
     public class GameController : Controller
     {
-        private readonly UserService _userService;
+        private readonly IUserService _userService;
         private readonly IGameService _gameService;
 
-        public GameController(UserService userService, IGameService gameService)
+        public GameController(IUserService userService, IGameService gameService)
         {
             _userService = userService;
             _gameService = gameService;

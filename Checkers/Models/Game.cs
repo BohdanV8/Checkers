@@ -2,11 +2,17 @@
 using MongoDB.Bson.Serialization.Attributes;
 namespace Checkers.Models
 {
+    public class Position
+    {
+        public int Row { get; set; }
+        public int Col { get; set; }
+    }
     public class Game
     {
         [BsonId]
         [BsonRepresentation(MongoDB.Bson.BsonType.ObjectId)]
         public string Id { get; set; } = ObjectId.GenerateNewId().ToString();
+        public Position? ContinueJumpFrom { get; set; }
         public string PlayerWhiteId { get; set; } = string.Empty;
         public string PlayerBlackId { get; set; } = string.Empty;
         [BsonRepresentation(MongoDB.Bson.BsonType.String)]

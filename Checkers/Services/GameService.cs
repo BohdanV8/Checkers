@@ -55,6 +55,43 @@ namespace Checkers.Services
         {
             return await _context.Games.Find(g => g.Status == GameEnums.GameStatus.WaitingForOpponent).ToListAsync();
         }
+        private bool CanCaptureFrom(GameEnums.Piece[][] board, int row, int col, GameEnums.Piece currentPiece)
+        {
+            // Визначаємо, хто ворог
+            bool isWhite = currentPiece == GameEnums.Piece.White || currentPiece == GameEnums.Piece.WhiteKing;
+            var enemySimple = isWhite ? GameEnums.Piece.Black : GameEnums.Piece.White;
+            var enemyKing = isWhite ? GameEnums.Piece.BlackKing : GameEnums.Piece.WhiteKing;
+
+            // Всі 4 напрямки по діагоналі
+            int[] rowDirs = { -1, -1, 1, 1 };
+            int[] colDirs = { -1, 1, -1, 1 };
+
+            for (int i = 0; i < 4; i++)
+            {
+                int midRow = row + rowDirs[i];     // Клітинка, яку перестрибуємо
+                int targetRow = row + rowDirs[i] * 2; // Клітинка, куди приземляємось
+                int midCol = col + colDirs[i];
+                int targetCol = col + colDirs[i] * 2;
+
+                // 1. Перевіряємо межі дошки
+                if (targetRow >= 0 && targetRow < 8 && targetCol >= 0 && targetCol < 8)
+                {
+                    var midPiece = board[midRow][midCol];
+                    var targetPiece = board[targetRow][targetCol];
+
+                    // 2. Якщо посередині ворог, а за ним пусто — можна бити!
+                    if ((midPiece == enemySimple || midPiece == enemyKing) && targetPiece == GameEnums.Piece.Empty)
+                    {
+                        // Додаткова перевірка для звичайних шашок (не дамок):
+                        // Якщо хочеш дозволити бити назад звичайним шашкам (міжнародні правила) - цей код ок.
+                        // Якщо бити назад можуть тільки дамки - треба додати перевірку на напрямок.
+                        // (Зазвичай у більшості правил бити назад МОЖНА всім).
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
         public async Task<Game> MakeMoveAsync(string userId, MoveRequest move)
         {
             Game? game = await GetGameAsync(move.GameId);
@@ -76,6 +113,13 @@ namespace Checkers.Services
             {
                 throw new Exception("It's not your turn");
             }
+            if (game.ContinueJumpFrom != null)
+            {
+                if (move.FromRow != game.ContinueJumpFrom.Row || move.FromCol != game.ContinueJumpFrom.Col)
+                {
+                    throw new Exception("You must continue capturing with the active piece!");
+                }
+            }
             GameEnums.Piece[][] board = game.Board;
             GameEnums.Piece piece = board[move.FromRow][move.FromCol];
             if(piece == GameEnums.Piece.Empty) throw new Exception("Selected empty cell");
@@ -91,7 +135,13 @@ namespace Checkers.Services
             // Абсолютна різниця (модуль числа), бо нам байдуже вліво чи вправо
             int absRowDiff = Math.Abs(RowDiff);
             int absColDiff = Math.Abs(ColDiff);
+            bool isCapture = absRowDiff == 2;
             if (absColDiff != absRowDiff) throw new Exception("Move must be diagonal");
+            // --- ВАЛІДАЦІЯ ТИПУ ХОДУ ---
+            if (game.ContinueJumpFrom != null && absRowDiff != 2)
+            {
+                throw new Exception("You must capture!");
+            }
             // --- Логіка Звичайного Ходу (на 1 клітинку) ---
             if (absRowDiff == 1)
             {
@@ -133,15 +183,38 @@ namespace Checkers.Services
 
             if (piece == GameEnums.Piece.Black && move.ToRow == 7)
                 board[move.ToRow][move.ToCol] = GameEnums.Piece.BlackKing;
-            // 6. Зміна черги ходу
-            // (Поки що просто міняємо чергу. Для серійних стрибків треба складнішу логіку)
-            game.CurrentTurn = game.CurrentTurn == GameEnums.Piece.White
-                ? GameEnums.Piece.Black
-                : GameEnums.Piece.White;
-            // 7. Зберігаємо зміни в базу
+
+
+            // --- ГОЛОВНА МАГІЯ МУЛЬТИ-ДЖАМПА ---
+
+            bool turnEnded = true; // За замовчуванням хід закінчується
+            if (isCapture)
+            {
+                // Якщо це було биття, перевіряємо, чи можна бити далі
+                // Важливий нюанс правил: якщо шашка стала дамкою, серія зазвичай закінчується (залежить від правил).
+                // Але в міжнародних часто можна бити далі вже як дамка. Давай поки дозволимо бити далі.
+
+                if (CanCaptureFrom(game.Board, move.ToRow, move.ToCol, piece))
+                {
+                    // Є серія!
+                    game.ContinueJumpFrom = new Position { Row = move.ToRow, Col = move.ToCol };
+                    turnEnded = false; // Хід НЕ переходить до іншого
+                }
+            }
+            if (turnEnded)
+            {
+                game.ContinueJumpFrom = null; // Скидаємо серію
+                game.CurrentTurn = game.CurrentTurn == GameEnums.Piece.White
+                    ? GameEnums.Piece.Black
+                    : GameEnums.Piece.White;
+            }
+
+           
+            // 6. Зберігаємо зміни в базу
             var update = Builders<Game>.Update
                 .Set(g => g.Board, board)
-                .Set(g => g.CurrentTurn, game.CurrentTurn);
+                .Set(g => g.CurrentTurn, game.CurrentTurn)
+                .Set(g => g.ContinueJumpFrom, game.ContinueJumpFrom);
 
             await _context.Games.UpdateOneAsync(g => g.Id == game.Id, update);
             await _hubContext.Clients.Group(move.GameId).SendAsync("GameUpdated", game);
