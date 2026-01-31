@@ -19,7 +19,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactPolicy", policy =>
     {
-        policy.WithOrigins("https://localhost:3000") // Дозволяємо тільки React
+        policy.WithOrigins(["https://localhost:3000", "https://checkersclient-jaz80p5ft-bohdans-projects-77abd7a4.vercel.app"]) // Дозволяємо тільки React
               .AllowAnyMethod()                     // GET, POST, PUT, DELETE...
               .AllowAnyHeader()                     // Content-Type, Authorization...
               .AllowCredentials();                  // <--- ВАЖЛИВО! Дозволяє передавати Cookies
